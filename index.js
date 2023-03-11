@@ -57,7 +57,7 @@ async function getIssueNumber(tools) {
   const issueComment = (await tools.github.issues.listComments({
     owner: tools.context.repo.owner,
     repo: tools.context.repo.repo,
-    issue_number: tools.context.issue.number,
+    issue_number: tools.context.issue.issue_number,
     per_page: 1
   })).data[0].body;
 
@@ -74,19 +74,17 @@ async function getIssueNumber(tools) {
 }
 
 async function addJiraComment(jira, tools) {
-  tools.log.info("Adding a comment");
+  tools.log.info("Adding a Jira comment");
   const payload = tools.context.payload;
   const comment = payload.comment;
 
+  const mdPreamble = "\n\n---\n######"
   const issue = await getIssueNumber(tools);
-
-  const body = `${comment.body}\n\nPosted by: ${comment.user.html_url}\n\n${comment.html_url}`;
-  // const body = `${comment.body}\n\n###### Original post: ${comment.html_url} by ${comment.user.html_url}`;
+  const body = `${comment.body}${mdPreamble}Comment by: ${comment.user.html_url} at ${comment.html_url}`;
 
 
-  tools.log.pending("Creating Jira comment with the following parameters");
+  tools.log.pending(`Creating Jira comment for issue ${issue} with the following content:`);
   tools.log.info(`Body: ${body}`);
-  tools.log.info(`Issue: ${issue}`);
 
   const result = await jira.addComment(issue, body);
   tools.log.complete("Comment added to Jira");
@@ -96,8 +94,7 @@ async function addJiraComment(jira, tools) {
 async function addJiraTicket(jira, tools) {
   const payload = tools.context.payload;
   const title = payload.issue.title;
-  const body = `${payload.issue.body}\n\nRaised by: ${payload.issue.user.html_url}\n\n${payload.issue.html_url}`;
-  //const body = `${payload.issue.body}\n\n######Comment by: ${payload.issue.user.html_url} at ${payload.issue.html_url}`;
+  const body = `${payload.issue.body}${mdPreamble}Original post: ${payload.issue.html_url} by ${payload.issue.user.html_url}`;
 
   const project = core.getInput('project', { required: true });
 
@@ -123,6 +120,7 @@ async function addJiraTicket(jira, tools) {
   tools.log.complete("Created Jira ticket");
 
   const jiraIssue = result.key;
+
   const ghIssueNumber = tools.context.issue.issue_number 
   tools.log.pending(`Creating issue comment ${ghIssueNumber} with Jira issue number ${jiraIssue}`);
   try {
@@ -135,6 +133,6 @@ async function addJiraTicket(jira, tools) {
   } catch (error) {
     tools.log.fatal(error)
   }
-  tools.log.complete("Created Issue comment with Jira Issue number");
+  tools.log.complete("Successfully added new GitHub issue with Jira issue number");
   return result;
 }
