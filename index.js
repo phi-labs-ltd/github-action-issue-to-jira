@@ -13,7 +13,7 @@ Toolkit.run(async tools => {
       apiVersion: '2',
       strictSSL: true
     });
-    
+
     const event = process.env.GITHUB_EVENT_NAME;
     const payload = tools.context.payload;
     if (event == 'issues' && payload.action == 'opened') {
@@ -29,7 +29,7 @@ Toolkit.run(async tools => {
     }
 
     tools.exit.success('We did it!')
-  } catch(e) {
+  } catch (e) {
     console.log(e);
     tools.exit.failure(e.message)
   }
@@ -38,7 +38,7 @@ Toolkit.run(async tools => {
 async function addJiraLabel(jira, tools) {
   const payload = tools.context.payload;
   const label = payload.label.name;
-  const request = { "update": { "labels": [ {"add": label } ] } };
+  const request = { "update": { "labels": [{ "add": label }] } };
   const issueNumber = await getIssueNumber(tools);
   const result = await jira.updateIssue(issueNumber, request);
   console.log(result);
@@ -47,7 +47,7 @@ async function addJiraLabel(jira, tools) {
 async function removeJiraLabel(jira, tools) {
   const payload = tools.context.payload;
   const label = payload.label.name;
-  const request = { "update": { "labels": [ {"remove": label } ] } };
+  const request = { "update": { "labels": [{ "remove": label }] } };
   const issueNumber = await getIssueNumber(tools);
   const result = await jira.updateIssue(issueNumber, request);
   console.log(result);
@@ -82,7 +82,7 @@ async function addJiraComment(jira, tools) {
 
   const body = `${comment.body}\n\nPosted by: ${comment.user.html_url}\n\n${comment.html_url}`;
   // const body = `${comment.body}\n\n###### Original post: ${comment.html_url} by ${comment.user.html_url}`;
-  
+
 
   tools.log.pending("Creating Jira comment with the following parameters");
   tools.log.info(`Body: ${body}`);
@@ -123,13 +123,18 @@ async function addJiraTicket(jira, tools) {
   tools.log.complete("Created Jira ticket");
 
   const jiraIssue = result.key;
-  tools.log.pending("Creating Issue comment with Jira Issue number");
-  const comment = await tools.github.issues.createComment({
-    owner: tools.context.repo.owner,
-    repo: tools.context.repo.repo,
-    issue_number: tools.context.issue.number,
-    body: `Issue: ${jiraIssue}`
-  });
-  tools.log.complete("Creating Issue comment with Jira Issue number");
+  const ghIssueNumber = tools.context.issue.issue_number 
+  tools.log.pending(`Creating issue comment ${ghIssueNumber} with Jira issue number ${jiraIssue}`);
+  try {
+    await tools.github.issues.createComment({
+      owner: tools.context.repo.owner,
+      repo: tools.context.repo.repo,
+      issue_number: ghIssueNumber,
+      body: `Issue: ${jiraIssue}`
+    });
+  } catch (error) {
+    tools.log.fatal(error)
+  }
+  tools.log.complete("Created Issue comment with Jira Issue number");
   return result;
 }
