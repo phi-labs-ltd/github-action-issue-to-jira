@@ -2,10 +2,11 @@ const { Toolkit } = require('actions-toolkit');
 const core = require('@actions/core');
 var JiraApi = require('jira-client');
 
-// Run your GitHub Action!
+const mdPreamble = "\n\n---\n###### "
+
 Toolkit.run(async tools => {
   try {
-    var jira = new JiraApi({
+    let jira = new JiraApi({
       protocol: 'https',
       host: core.getInput('jiraHost', { required: true }),
       username: core.getInput('jiraUsername', { required: true }),
@@ -16,22 +17,27 @@ Toolkit.run(async tools => {
 
     const event = process.env.GITHUB_EVENT_NAME;
     const payload = tools.context.payload;
+    let exitSuccessMsg = ''
     if (event == 'issues' && payload.action == 'opened') {
       await addJiraTicket(jira, tools);
+      exitSuccessMsg = "Jira ticket added";
     } else if (event == 'issues' && payload.action == 'labeled') {
       await addJiraLabel(jira, tools);
+      exitSuccessMsg = "Jira label added";
     } else if (event == 'issues' && payload.action == 'unlabeled') {
       await removeJiraLabel(jira, tools);
+      exitSuccessMsg = "Jira label removed";
     } else if (event == 'issue_comment') {
       await addJiraComment(jira, tools);
+      exitSuccessMsg = "Jira comment added";
     } else {
       tools.exit.failure(`Unknown event: ${event}`)
     }
 
-    tools.exit.success('We did it!')
-  } catch (e) {
-    console.log(e);
-    tools.exit.failure(e.message)
+    tools.exit.success(exitSuccessMsg)
+  } catch (error) {
+    console.log(error);
+    tools.exit.failure(error.message)
   }
 });
 
@@ -78,29 +84,25 @@ async function addJiraComment(jira, tools) {
   const payload = tools.context.payload;
   const comment = payload.comment;
 
-  const mdPreamble = "\n\n---\n######"
   const issue = await getIssueNumber(tools);
-  const body = `${comment.body}${mdPreamble}Comment by: ${comment.user.html_url} at ${comment.html_url}`;
-
+  const fullBody = `${comment.body}${mdPreamble}Comment by: ${comment.user.html_url} at ${comment.html_url}`;
 
   tools.log.pending(`Creating Jira comment for issue ${issue} with the following content:`);
-  tools.log.info(`Body: ${body}`);
+  tools.log.info(`Body: ${fullBody}`);
 
-  const result = await jira.addComment(issue, body);
-  tools.log.complete("Comment added to Jira");
-  return result;
+  return await jira.addComment(issue, fullBody);
 }
 
 async function addJiraTicket(jira, tools) {
   const payload = tools.context.payload;
   const title = payload.issue.title;
-  const body = `${payload.issue.body}${mdPreamble}Original post: ${payload.issue.html_url} by ${payload.issue.user.html_url}`;
+  const fullBody = `${payload.issue.body}${mdPreamble}Original post: ${payload.issue.html_url} by ${payload.issue.user.html_url}`;
 
   const project = core.getInput('project', { required: true });
 
   tools.log.pending("Creating Jira ticket with the following parameters");
   tools.log.info(`Title: ${title}`);
-  tools.log.info(`Body: ${body}`);
+  tools.log.info(`Body: ${fullBody}`);
   tools.log.info(`Project: ${project}`);
 
   let request = {
@@ -109,7 +111,7 @@ async function addJiraTicket(jira, tools) {
         key: project
       },
       summary: title,
-      description: body,
+      description: fullBody,
       issuetype: {
         name: "Task"
       }
@@ -120,19 +122,14 @@ async function addJiraTicket(jira, tools) {
   tools.log.complete("Created Jira ticket");
 
   const jiraIssue = result.key;
-
-  const ghIssueNumber = tools.context.issue.issue_number 
+  const ghIssueNumber = tools.context.issue.issue_number;
   tools.log.pending(`Creating issue comment ${ghIssueNumber} with Jira issue number ${jiraIssue}`);
-  try {
-    await tools.github.issues.createComment({
-      owner: tools.context.repo.owner,
-      repo: tools.context.repo.repo,
-      issue_number: ghIssueNumber,
-      body: `Issue: ${jiraIssue}`
-    });
-  } catch (error) {
-    tools.log.fatal(error)
-  }
-  tools.log.complete("Successfully added new GitHub issue with Jira issue number");
+  
+  await tools.github.issues.createComment({
+    owner: tools.context.repo.owner,
+    repo: tools.context.repo.repo,
+    issue_number: ghIssueNumber,
+    body: `Issue: ${jiraIssue}`
+  });
   return result;
 }
