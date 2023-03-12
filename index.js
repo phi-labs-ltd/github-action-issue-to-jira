@@ -1,12 +1,12 @@
 const { Toolkit } = require('actions-toolkit');
 const core = require('@actions/core');
-var JiraApi = require('jira-client');
+const JiraApi = require('jira-client');
 
-const mdPreamble = "\n\n---\n###### "
+const mdPreamble = "\n\n---\n"
 
 Toolkit.run(async tools => {
   try {
-    let jira = new JiraApi({
+    const jira = new JiraApi({
       protocol: 'https',
       host: core.getInput('jiraHost', { required: true }),
       username: core.getInput('jiraUsername', { required: true }),
@@ -14,6 +14,10 @@ Toolkit.run(async tools => {
       apiVersion: '2',
       strictSSL: true
     });
+
+
+    jira.makeRequestHeader()
+
 
     const event = process.env.GITHUB_EVENT_NAME;
     const payload = tools.context.payload;

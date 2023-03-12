@@ -4,8 +4,8 @@ runs:
   using: docker
   image: Dockerfile
 branding:
-  icon: mail
-  color: orange
+  icon: paperclip
+  color: purple
 inputs:
   jiraHost:
     description: "The URL of your Jira instance e.g. https://myapp.atlassian.net"
