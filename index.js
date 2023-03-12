@@ -2,16 +2,14 @@ const { Toolkit } = require('actions-toolkit');
 const core = require('@actions/core');
 var JiraApi = require('jira-client');
 
-const mdPreamble = "\n\n---\n###### "
-
 Toolkit.run(async tools => {
   try {
-    let jira = new JiraApi({
+    const jira = new JiraApi({
       protocol: 'https',
       host: core.getInput('jiraHost', { required: true }),
       username: core.getInput('jiraUsername', { required: true }),
       password: core.getInput('jiraPassword', { required: true }),
-      apiVersion: '2',
+      apiVersion: '3',
       strictSSL: true
     });
 
@@ -96,40 +94,77 @@ async function addJiraComment(jira, tools) {
 async function addJiraTicket(jira, tools) {
   const payload = tools.context.payload;
   const title = payload.issue.title;
-  const fullBody = `${payload.issue.body}${mdPreamble}Original post: ${payload.issue.html_url} by ${payload.issue.user.html_url}`;
+  const footer = `Original post: ${payload.issue.html_url} by ${payload.issue.user.html_url}`;
 
   const project = core.getInput('project', { required: true });
 
   tools.log.pending("Creating Jira ticket with the following parameters");
   tools.log.info(`Title: ${title}`);
-  tools.log.info(`Body: ${fullBody}`);
+  tools.log.info(`Body: ${payload.issue.body} -- ${footer}`);
   tools.log.info(`Project: ${project}`);
 
   let request = {
+    "update": {},
     fields: {
       project: {
         key: project
       },
       summary: title,
-      description: fullBody,
+      description: {
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: payload.issue.body || "{no content was added to GitHub issue}"
+              }
+            ]
+          },
+          {
+            type: "rule"
+          },
+          {
+            type: "heading",
+            attrs: {
+              level: 6
+            },
+            content: [
+              {
+                type: "text",
+                text: footer
+              }
+            ]
+          }
+        ],
+        type: "doc",
+        version: 1
+      },
       issuetype: {
         name: "Task"
       }
     }
   };
 
-  const result = await jira.addNewIssue(request);
-  tools.log.complete("Created Jira ticket");
+  const out = JSON.stringify(request);
+  tools.log.info(out)
+  try {
+    const result = await jira.addNewIssue(out);
+    tools.log.complete("Created Jira ticket");
 
-  const jiraIssue = result.key;
-  const ghIssueNumber = tools.context.issue.issue_number;
-  tools.log.pending(`Creating issue comment ${ghIssueNumber} with Jira issue number ${jiraIssue}`);
-  
-  await tools.github.issues.createComment({
-    owner: tools.context.repo.owner,
-    repo: tools.context.repo.repo,
-    issue_number: ghIssueNumber,
-    body: `Issue: ${jiraIssue}`
-  });
-  return result;
+    const jiraIssue = result.key;
+    const ghIssueNumber = tools.context.issue.issue_number;
+    tools.log.pending(`Creating issue comment ${ghIssueNumber} with Jira issue number ${jiraIssue}`);
+
+    await tools.github.issues.createComment({
+      owner: tools.context.repo.owner,
+      repo: tools.context.repo.repo,
+      issue_number: ghIssueNumber,
+      body: `Issue: ${jiraIssue}`
+    });
+    return result;
+
+  } catch (error) {
+    tools.exit.failure(`Error on creating Jira ticket ${error}`)
+  }
 }
