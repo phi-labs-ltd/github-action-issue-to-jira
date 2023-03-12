@@ -2,6 +2,27 @@ const { Toolkit } = require('actions-toolkit');
 const core = require('@actions/core');
 var JiraApi = require('jira-client');
 
+const _request = require('postman-request');
+function internalRequest(uri, options) {
+  return new Promise((resolve, reject) => {
+    console.log({ uri }, { options });
+    _request(uri, options, (err, httpResponse) => {
+      if (err) {
+        console.log({err})
+        reject(err);
+      } else {
+        console.log({httpResponse})
+        if (httpResponse.statusCode >= 400) {
+          reject(httpResponse.body);
+        }
+
+        // for compatibility with request-promise
+        resolve(httpResponse.body);
+      }
+    });
+  });
+}
+
 Toolkit.run(async tools => {
   try {
     const jira = new JiraApi({
@@ -10,7 +31,7 @@ Toolkit.run(async tools => {
       username: core.getInput('jiraUsername', { required: true }),
       password: core.getInput('jiraPassword', { required: true }),
       apiVersion: '3',
-      strictSSL: true
+      strictSSL: true,
     });
 
     const event = process.env.GITHUB_EVENT_NAME;
@@ -38,6 +59,8 @@ Toolkit.run(async tools => {
     tools.exit.failure(error.message)
   }
 });
+
+
 
 async function addJiraLabel(jira, tools) {
   const payload = tools.context.payload;
@@ -95,7 +118,6 @@ async function addJiraTicket(jira, tools) {
   const payload = tools.context.payload;
   const title = payload.issue.title;
   const footer = `Original post: ${payload.issue.html_url} by ${payload.issue.user.html_url}`;
-
   const project = core.getInput('project', { required: true });
 
   tools.log.pending("Creating Jira ticket with the following parameters");
@@ -103,53 +125,52 @@ async function addJiraTicket(jira, tools) {
   tools.log.info(`Body: ${payload.issue.body} -- ${footer}`);
   tools.log.info(`Project: ${project}`);
 
-  let request = {
-    "update": {},
+  const request = {
     fields: {
       project: {
-        key: project
+        key: project,
       },
       summary: title,
       description: {
         content: [
           {
-            type: "paragraph",
+            type: 'paragraph',
             content: [
               {
-                type: "text",
-                text: payload.issue.body || "{no content was added to GitHub issue}"
-              }
-            ]
+                type: 'text',
+                text: payload.issue.body || "{No content was added to the issue body}",
+              },
+            ],
           },
           {
-            type: "rule"
+            type: 'rule',
           },
           {
-            type: "heading",
+            type: 'heading',
             attrs: {
-              level: 6
+              level: 6,
             },
             content: [
               {
-                type: "text",
-                text: footer
-              }
-            ]
-          }
+                type: 'text',
+                text: footer,
+              },
+            ],
+          },
         ],
-        type: "doc",
-        version: 1
+        type: 'doc',
+        version: 1,
       },
       issuetype: {
-        name: "Task"
-      }
-    }
+        name: 'Task',
+      },
+    },
   };
 
-  const out = JSON.stringify(request);
-  tools.log.info(out)
+  // const out = JSON.stringify(request);
+  tools.log.info("Making attempt with")
   try {
-    const result = await jira.addNewIssue(out);
+    const result = await jira.addNewIssue(request);
     tools.log.complete("Created Jira ticket");
 
     const jiraIssue = result.key;
